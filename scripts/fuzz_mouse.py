@@ -2,7 +2,7 @@
 #
 # This file is part of Facedancer.
 #
-# Modified by Carles Pey. 
+# Modified by Carles Pey.
 # 
 
 from facedancer import *
@@ -22,6 +22,11 @@ from math import *
 
 # Specifies how many simultaneously keys we want to support.
 KEY_ROLLOVER = 8
+
+# Pulsation and movement configurations
+PULSATION_INTERVAL = 10
+MOVEMENT_INTERVAL = 20
+PAUSE_RATIO = MOVEMENT_INTERVAL / 5
 
 
 @use_inner_classes_automatically
@@ -156,7 +161,8 @@ class USBMouseDevice(USBDevice):
 
     def __post_init__(self):
         super().__post_init__()
-        self.t = 15
+        self.t = 0
+        self.move_ctrl = 0
         self.x = 0
         self.y = 0
         self.pulsed = 0
@@ -166,24 +172,45 @@ class USBMouseDevice(USBDevice):
         self.y = y
 
     def _move(self, endpoint, x, y):
-        sel = random.randint(1, 7)
-        button_sel = sel << 5
-        self.pulsed += 1
-        buttons = not (self.pulsed % 2) and button_sel or 0
-        position = [(256 + trunc(x)) % 255, (256 + trunc(y)) % 255, 0]
+        button_sel = 1
+        self.pulsed = (self.pulsed + 1) % (PULSATION_INTERVAL * 2)
+        buttons = (self.pulsed < PULSATION_INTERVAL) and button_sel or 0
+        position = [(trunc(x)) % 255, (trunc(y)) % 255, 0]
         data = bytes([buttons, *position])
         endpoint.send(data)
 
+    def _update_pos_rand(self):
+        if self.t < 10:
+            return
+        if not (self.move_ctrl % MOVEMENT_INTERVAL):
+            self.x = self.x_store
+            self.y = self.y_store
+            self.x_store = 0
+            self.y_store = 0
+            pos = random.randint(1, 255)
+            self.x += pos
+            self.y += pos
+            self.x = (self.x + 50 * sin(self.t)) % 255
+            self.y = (self.y + 50 * cos(self.t)) % 255
+        elif (self.move_ctrl % MOVEMENT_INTERVAL) < PAUSE_RATIO:
+            pass
+        else:
+            self.x_store = self.x
+            self.y_store = self.y
+            self.x = 0
+            self.y = 0
+
+    def _update_pos(self):
+        if self.t > 10:
+            self.x = (20 * sin(self.t)) % 255
+            self.y = (20 * cos(self.t)) % 255
+
     def handle_data_requested(self, endpoint: USBEndpoint):
         """ Provide data once per host request. """
-        pos = random.randint(1, 255)
-        self.x = (self.x + self.t + pos) % 255
-        self.y = (self.y + self.t + pos) % 255
-        if self.t > 10:
-            #self._move(endpoint, 20*sin(t), 20*cos(t))
-            self._move(endpoint, 20*sin(self.x), 20*cos(self.y))
+        self._update_pos_rand()
+        self._move(endpoint, self.x, self.y)
         self.t += 0.1
-        print(f"pos: {self.x}, {self.y}")
+        self.move_ctrl = (self.move_ctrl + 1) % 255
 
     async def move(self):
         pass
@@ -193,8 +220,11 @@ device = USBMouseDevice()
 async def move_mouse():
     logging.info("Beginning mouse moving demo...")
 
+    await device.set_initial_coords(0xFB, 1)
+    await device.set_initial_coords(0, 1)
+
     await asyncio.sleep(2)
-    await device.set_initial_coords(20, 10)
+    await device.set_initial_coords(0, 0)
 
     logging.info("Location assigned. Idly handling USB requests.")
 

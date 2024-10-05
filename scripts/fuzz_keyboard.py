@@ -2,7 +2,7 @@
 #
 # This file is part of Facedancer.
 #
-# Modified by Carles Pey. 
+# Modified by Carles Pey.
 #
 
 from facedancer import *
@@ -167,11 +167,11 @@ class USBKeyboardDevice(USBDevice):
              [0] * (KEY_ROLLOVER - len(self.active_keys))
 
         return bytes([self.modifiers, 0, *scancodes])
-    
+
 
     def _generate_hid_report_randomized(self) -> bytes:
         """ Generates a single HID report for the given keyboard state with added randomness. """
-    
+
         # Randomly generate the modifiers.
         random_modifiers = random.randint(0, 0xFF)
 
